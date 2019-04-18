@@ -488,13 +488,13 @@ class TdExample {
               auto parameters = td_api::make_object<td_api::tdlibParameters>();
               parameters->database_directory_ = "tdlib";
               parameters->use_message_database_ = true;
-              parameters->use_secret_chats_ = true;
-              parameters->api_id_ = 94575;
-              parameters->api_hash_ = "a3406de8d171bb422bb6ddf3bbd800e2";
-              parameters->system_language_code_ = "en";
-              parameters->device_model_ = "Desktop";
-              parameters->system_version_ = "Ubuntu 18.04.2 LTS";
-              parameters->application_version_ = "1.0";
+              parameters->use_secret_chats_ = false;
+              parameters->api_id_ = 886214;
+              parameters->api_hash_ = "9558add38d2d97b97ea46fcc9333dcfb";
+              parameters->system_language_code_ = "ru";
+              parameters->device_model_ = "Mobile device";
+              parameters->system_version_ = "Android S9";
+              parameters->application_version_ = "2.0.58";
               parameters->enable_storage_optimizer_ = true;
               send_query(td_api::make_object<td_api::setTdlibParameters>(std::move(parameters)),
                          create_authentication_query_handler());
