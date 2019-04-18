@@ -17,6 +17,11 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <thread>
+#include <sqlite3.h>
+
+// m 797687104 💎 Получить монетку
 
 // Simple single-threaded example of TDLib usage.
 // Real world programs should use separate thread for the user input.
@@ -55,7 +60,82 @@ class TdExample {
   TdExample() {
     td::Log::set_verbosity_level(1);
     client_ = std::make_unique<td::Client>();
+    sqlite3_open("tg_members.db", &m_db_ptr);
+    create();
   }
+
+  bool query_write(std::string sql)
+   {
+      char* messaggeError; 
+      int rez = sqlite3_exec(m_db_ptr, sql.c_str(), NULL, 0, &messaggeError); 
+   
+      if (rez != SQLITE_OK) { 
+         std::cerr << "Error in query: " << messaggeError << std::endl; 
+         std::cerr << sql << std::endl;
+         sqlite3_free(messaggeError); 
+      } 
+      else
+         // std::cout << "Successfull query !" << std::endl; 
+
+      return rez == SQLITE_OK;
+   }
+
+   bool query_read(std::string sql, std::vector<std::string>& rez_list, unsigned int cols)
+   {
+      sqlite3_stmt*        stmt;
+      const unsigned char* text;
+
+      int rez = sqlite3_prepare(m_db_ptr, sql.c_str(), sql.length(), &stmt, NULL);
+
+      if (rez == SQLITE_ERROR)
+      {
+         printf( std::string(sqlite3_errmsg(m_db_ptr)).c_str() );
+         printf( sql.c_str() );
+         return false;
+      }
+
+      bool done = false;
+      while (!done) {
+         switch (sqlite3_step (stmt)) {
+            case SQLITE_ROW:
+               char* ch;
+               for (unsigned int i = 0; i < cols; i++)
+               {
+                  text  = sqlite3_column_text(stmt, i);
+
+                  ch = (char*)text;
+                  rez_list.push_back(std::string(ch));
+               }
+               
+               break;
+
+            case SQLITE_DONE:
+               done = true;
+               break;
+
+            default:
+               printf( std::string(sqlite3_errmsg(m_db_ptr)).c_str() );
+               return false;
+         }
+      }
+
+      sqlite3_finalize(stmt);
+
+      return true;
+   }
+
+   bool create()
+   {
+      std::string sql = "CREATE TABLE IF NOT EXISTS TG_USERS("
+                           "USER_ID                         BIGINT                                 NOT NULL, "
+                           // "CHAT_ID                         BIGINT                                 NOT NULL, "
+                           "FIRST_NAME                      VARСHAR(255)                           NOT NULL, "
+                           "LAST_NAME                       VARСHAR(255)                           NOT NULL, "
+                           "USERNAME                        VARCHAR(255)                           NOT NULL "
+                           // "PHONE_NUMBER                    VARCHAR(255)                           NOT NULL "
+                        ");";
+      return query_write(sql);
+   }
 
   void loop() {
     while (true) {
@@ -78,18 +158,131 @@ class TdExample {
           return;
         }
         if (action == "u") {
-          std::cerr << "Checking for updates..." << std::endl;
-          while (true) {
-            auto response = client_->receive(0);
-            if (response.object) {
-              process_response(std::move(response));
-            } else {
-              break;
-            }
-          }
+          update();
         } else if (action == "l") {
           std::cerr << "Logging out..." << std::endl;
           send_query(td_api::make_object<td_api::logOut>(), {});
+        } else if (action == "x") {
+          std::string title;
+          ss >> title;
+          bool is_channel;
+          ss >> is_channel;
+          std::string description;
+          ss >> description;
+
+          std::cerr << "Creating new supergroup..." << std::endl;
+          send_query(td_api::make_object<td_api::createNewSupergroupChat>(title, is_channel, description),[this](Object object) {
+                       if (object->get_id() == td_api::error::ID) {
+                         return;
+                       }
+                       auto cht = td::move_tl_object_as<td_api::chat>(object);
+                       std::cerr << "[id:" << cht->id_ << "] [title:" << cht->title_ << "] [super_group_id:" << td::move_tl_object_as<td_api::chatTypeSupergroup>(cht->type_)->supergroup_id_ << "]" << std::endl;
+                     });
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+          update();
+          std::this_thread::sleep_for(std::chrono::milliseconds(500));
+          update();
+        } else if (action == "y") {
+          std::int64_t chat_id;
+          ss >> chat_id;
+
+          std::cerr << "Adding members to new supergroup..." << std::endl;
+
+              send_query(td_api::make_object<td_api::addChatMember>(chat_id, 510783846, 50), {});
+
+               std::this_thread::sleep_for(std::chrono::milliseconds(500));
+               update();
+
+               send_query(td_api::make_object<td_api::addChatMember>(chat_id, 328938922, 50), {});
+
+               std::this_thread::sleep_for(std::chrono::milliseconds(500));
+               update();
+
+            std::string sql = "SELECT COUNT(USER_ID) FROM TG_USERS;";
+            std::vector<std::string> vec;
+            bool flag = query_read(sql, vec, 1);
+
+            if (false == flag) break;
+
+            uint64_t count = strtoull(vec[0].c_str(), NULL, 10);
+          
+            for (uint64_t i=0; i < count; i++)
+            {
+               std::vector<std::string> vec;
+               bool flag = query_read("SELECT USER_ID FROM TG_USERS LIMIT " + std::to_string(i) + ", 1", vec, 1);
+
+               if (false == flag || 0 == vec.size()) break;
+
+               std::int32_t user_id = strtoull(vec[0].c_str(), NULL, 10);
+
+               std::cerr << user_id << std::endl;
+
+               send_query(td_api::make_object<td_api::addChatMember>(chat_id, user_id, 50), {});
+
+               std::this_thread::sleep_for(std::chrono::milliseconds(500));
+               update();
+            }
+        } else if (action == "s") {
+          std::string username;
+          ss >> username;
+
+          std::cerr << "Searching public chat..." << std::endl;
+          send_query(td_api::make_object<td_api::searchPublicChat>(username),
+                     [this](Object object) {
+                       if (object->get_id() == td_api::error::ID) {
+                         return;
+                       }
+                       auto cht = td::move_tl_object_as<td_api::chat>(object);
+                       std::cerr << "[id:" << cht->id_ << "] [title:" << cht->title_ << "] [super_group_id:" << td::move_tl_object_as<td_api::chatTypeSupergroup>(cht->type_)->supergroup_id_ << "]" << std::endl;
+                     });
+         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          update();
+        } else if (action == "f") {
+          std::int32_t group_id;
+          ss >> group_id;
+          std::int32_t offset;
+          ss >> offset;
+          std::int32_t limit;
+          ss >> limit;
+          std::int32_t count;
+          ss >> count;
+
+          std::cerr << "Getting basic group full info..." << std::endl;
+          for (int32_t j=0; j < count; j++) {
+            send_query(td_api::make_object<td_api::getSupergroupMembers>(group_id, td_api::make_object<td_api::supergroupMembersFilterSearch>(), offset + limit * j, limit),
+                        [this, limit](Object object) {
+                        if (object->get_id() == td_api::error::ID) {
+                           return;
+                        }
+                        auto info = td::move_tl_object_as<td_api::chatMembers>(object);
+                        std::cerr << "[total_count:" << info->total_count_ << "]" << std::endl;
+                        for (int32_t i=0; i < limit; i++)
+                        {
+                           if (info->members_.size() < limit)
+                                 break;
+
+                           send_query(td_api::make_object<td_api::getUser>(info->members_[i]->user_id_),
+                              [this](Object object) {
+                                 if (object->get_id() == td_api::error::ID) {
+                                    return;
+                                 }
+
+                                 auto usr = td::move_tl_object_as<td_api::user>(object);
+
+                                 std::cerr << "[username:" << usr->username_ << "] [user_id:" << usr->id_ << "]" << std::endl;
+
+                                 std::string sql = "INSERT INTO TG_USERS (USER_ID, FIRST_NAME, LAST_NAME, USERNAME) VALUES (" + std::to_string(usr->id_) + ", '" + usr->first_name_ + "', '" + usr->last_name_ + "', '" + usr->username_ + "');";
+
+                                 bool flag = query_write(sql);
+                              }
+                           );
+                        }
+                        });
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                        update();
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                        update();
+          }
         } else if (action == "m") {
           std::int64_t chat_id;
           ss >> chat_id;
@@ -97,15 +290,19 @@ class TdExample {
           std::string text;
           std::getline(ss, text);
 
-          std::cerr << "Sending message to chat " << chat_id << "..." << std::endl;
+         // for (int i=0; i < 1000; i++) {
+          std::cerr << "Sending message to chat " << chat_id << "..." << text << std::endl;
           auto send_message = td_api::make_object<td_api::sendMessage>();
           send_message->chat_id_ = chat_id;
           auto message_content = td_api::make_object<td_api::inputMessageText>();
           message_content->text_ = td_api::make_object<td_api::formattedText>();
-          message_content->text_->text_ = std::move(text);
+          message_content->text_->text_ = text;
           send_message->input_message_content_ = std::move(message_content);
 
           send_query(std::move(send_message), {});
+
+          std::this_thread::sleep_for(std::chrono::milliseconds(50));
+         // }
         } else if (action == "c") {
           std::cerr << "Loading chat list..." << std::endl;
           send_query(td_api::make_object<td_api::getChats>(std::numeric_limits<std::int64_t>::max(), 0, 20),
@@ -124,6 +321,8 @@ class TdExample {
   }
 
  private:
+   sqlite3 *m_db_ptr;
+
   using Object = td_api::object_ptr<td_api::Object>;
   std::unique_ptr<td::Client> client_;
 
@@ -150,6 +349,19 @@ class TdExample {
       handlers_.emplace(query_id, std::move(handler));
     }
     client_->send({query_id, std::move(f)});
+  }
+
+  void update()
+  {
+     std::cerr << "Checking for updates..." << std::endl;
+      while (true) {
+      auto response = client_->receive(0);
+      if (response.object) {
+         process_response(std::move(response));
+      } else {
+         break;
+      }
+    }
   }
 
   void process_response(td::Client::Response response) {
@@ -198,8 +410,8 @@ class TdExample {
                        if (update_new_message.message_->content_->get_id() == td_api::messageText::ID) {
                          text = static_cast<td_api::messageText &>(*update_new_message.message_->content_).text_->text_;
                        }
-                       std::cerr << "Got message: [chat_id:" << chat_id << "] [from:" << sender_user_name << "] ["
-                                 << text << "]" << std::endl;
+                     //   std::cerr << "Got message: [chat_id:" << chat_id << "] [from:" << sender_user_name << "] ["
+                     //             << text << "]" << std::endl;
                      },
                      [](auto &update) {}));
   }
@@ -281,7 +493,7 @@ class TdExample {
               parameters->api_hash_ = "a3406de8d171bb422bb6ddf3bbd800e2";
               parameters->system_language_code_ = "en";
               parameters->device_model_ = "Desktop";
-              parameters->system_version_ = "Unknown";
+              parameters->system_version_ = "Ubuntu 18.04.2 LTS";
               parameters->application_version_ = "1.0";
               parameters->enable_storage_optimizer_ = true;
               send_query(td_api::make_object<td_api::setTdlibParameters>(std::move(parameters)),
