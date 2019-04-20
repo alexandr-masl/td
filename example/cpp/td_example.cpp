@@ -410,8 +410,8 @@ class TdExample {
                        if (update_new_message.message_->content_->get_id() == td_api::messageText::ID) {
                          text = static_cast<td_api::messageText &>(*update_new_message.message_->content_).text_->text_;
                        }
-                     //   std::cerr << "Got message: [chat_id:" << chat_id << "] [from:" << sender_user_name << "] ["
-                     //             << text << "]" << std::endl;
+                       std::cerr << "Got message: [chat_id:" << chat_id << "] [from:" << sender_user_name << "] ["
+                                 << text << "]" << std::endl;
                      },
                      [](auto &update) {}));
   }
@@ -489,12 +489,12 @@ class TdExample {
               parameters->database_directory_ = "tdlib";
               parameters->use_message_database_ = true;
               parameters->use_secret_chats_ = false;
-              parameters->api_id_ = 886214;
-              parameters->api_hash_ = "9558add38d2d97b97ea46fcc9333dcfb";
-              parameters->system_language_code_ = "ru";
-              parameters->device_model_ = "Mobile device";
-              parameters->system_version_ = "Android S9";
-              parameters->application_version_ = "2.0.58";
+              parameters->api_id_ = 837480;
+              parameters->api_hash_ = "64cf0e60b82437fd3628c151e3614f85";
+              parameters->system_language_code_ = "en";
+              parameters->device_model_ = "Mobile";
+              parameters->system_version_ = "Android";
+              parameters->application_version_ = "1.0";
               parameters->enable_storage_optimizer_ = true;
               send_query(td_api::make_object<td_api::setTdlibParameters>(std::move(parameters)),
                          create_authentication_query_handler());
